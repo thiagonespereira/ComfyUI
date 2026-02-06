@@ -16,6 +16,10 @@ import sys
 import threading
 import time
 
+# Strip Jupyter/Colab kernel args (e.g. "-f <connection-file>") when running inside a notebook
+if "-f" in sys.argv:
+    sys.argv = [sys.argv[0]]
+
 # Set CLI args before ComfyUI parses them: listen on all interfaces for Colab/remote access
 if "--listen" not in sys.argv:
     sys.argv += ["--listen", "0.0.0.0"]
