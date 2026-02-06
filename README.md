@@ -49,6 +49,16 @@ ComfyUI lets you design and execute advanced stable diffusion pipelines using a 
 #### [Manual Install](#manual-install-windows-linux)
 Supports all operating systems and GPU types (NVIDIA, AMD, Intel, Apple Silicon, Ascend).
 
+#### Running with Gradio (Google Colab)
+To run ComfyUI in **Google Colab** with a live UI, use the Gradio launcher. In a Colab notebook:
+
+```bash
+!pip install -q gradio
+!cd /content/ComfyUI && python run_with_gradio.py
+```
+
+Or locally: `python run_with_gradio.py`. This starts the ComfyUI server and opens a Gradio app that embeds the UI (or exposes it via Colab’s port proxy). Requires `gradio>=4.0.0` (see [requirements.txt](requirements.txt)).
+
 ## [Examples](https://comfyanonymous.github.io/ComfyUI_examples/)
 See what ComfyUI can do with the [example workflows](https://comfyanonymous.github.io/ComfyUI_examples/).
 
