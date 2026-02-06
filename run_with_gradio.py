@@ -11,6 +11,7 @@ that embeds the ComfyUI UI (or shows the Colab proxy link when running in Colab)
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -51,6 +52,14 @@ def _wait_for_server(timeout: int = 90, interval: float = 1.0) -> bool:
 
 def _get_comfyui_url() -> str:
     """Return the URL to use for ComfyUI in the Gradio iframe (Colab proxy or local)."""
+    # 1) Explicit override via environment (works when running as a subprocess, e.g. Colab `!python`).
+    #    If COMFYUI_EXTERNAL_URL (or COMFYUI_URL) is set, always trust that.
+    env_url = os.environ.get("COMFYUI_EXTERNAL_URL") or os.environ.get("COMFYUI_URL")
+    if env_url:
+        return env_url
+
+    # 2) When running inside the Colab kernel process (import/use, not `!python`),
+    #    try to get the proxy URL via JS.
     try:
         from google.colab.output import eval_js
         url = eval_js("google.colab.kernel.proxyPort(" + str(COMFYUI_PORT) + ")")
@@ -86,6 +95,7 @@ def main() -> None:
     if in_colab:
         _expose_colab_port()
     comfy_url = _get_comfyui_url()
+    print(f"[run_with_gradio] Embedding ComfyUI UI from: {comfy_url}")
 
     try:
         import gradio as gr
