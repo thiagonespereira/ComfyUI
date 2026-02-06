@@ -16,31 +16,45 @@ import threading
 import time
 
 # Sanitize argv before ComfyUI parses it.
-# In Jupyter/Colab, sys.argv typically contains: ["python", "-f", "<kernel-connection.json>"]
-# The "-f" argument is not understood by ComfyUI's argparse and would cause a failure,
-# so we strip it (and its value) out before comfy.options / cli_args are imported.
-if "-f" in sys.argv:
-    idx = sys.argv.index("-f")
-    # Remove "-f" and the following path (if present)
-    del sys.argv[idx : min(idx + 2, len(sys.argv))]
+# In Jupyter/Colab, sys.argv contains: ["colab_kernel_launcher.py", "-f", "<kernel-connection.json>"]
+# (or similar). ComfyUI's argparse does not know "-f" and exits with "unrecognized arguments".
+# Replace argv with a minimal set so the server thread never sees Jupyter's args.
+def _argv_for_comfy():
+    base = [sys.argv[0]] if sys.argv else ["python"]
+    if "--listen" not in base:
+        base += ["--listen", "0.0.0.0"]
+    if "--disable-auto-launch" not in base:
+        base += ["--disable-auto-launch"]
+    return base
 
-# Ensure the ComfyUI server listens on all interfaces and doesn't try to auto-open a browser.
-if "--listen" not in sys.argv:
-    sys.argv += ["--listen", "0.0.0.0"]
-if "--disable-auto-launch" not in sys.argv:
-    sys.argv += ["--disable-auto-launch"]
+if "-f" in sys.argv or "ipython" in sys.modules:
+    sys.argv[:] = _argv_for_comfy()
+else:
+    if "--listen" not in sys.argv:
+        sys.argv += ["--listen", "0.0.0.0"]
+    if "--disable-auto-launch" not in sys.argv:
+        sys.argv += ["--disable-auto-launch"]
 
 # ComfyUI port (must match comfy/cli_args.py default)
 COMFYUI_PORT = 8188
 COMFYUI_URL_LOCAL = f"http://127.0.0.1:{COMFYUI_PORT}"
 
 
+_server_start_error: list[BaseException] = []  # shared so main() can report it
+
+
 def _run_comfyui_server():
     """Run the ComfyUI server in the current thread (for use in a daemon thread)."""
-    import main
+    global _server_start_error
+    _server_start_error.clear()
+    try:
+        import main
 
-    event_loop, _, start_all = main.start_comfyui()
-    event_loop.run_until_complete(start_all())
+        event_loop, _, start_all = main.start_comfyui()
+        event_loop.run_until_complete(start_all())
+    except BaseException as e:
+        _server_start_error.append(e)
+        raise
 
 
 def _wait_for_server(timeout: int = 90, interval: float = 1.0) -> bool:
@@ -85,10 +99,14 @@ def main() -> None:
     server_thread.start()
 
     if not _wait_for_server():
-        raise RuntimeError(
+        msg = (
             "ComfyUI server did not become ready in time. "
             "Check the console for errors."
         )
+        if _server_start_error:
+            err = _server_start_error[0]
+            msg += f"\n\nServer thread failed with: {type(err).__name__}: {err}"
+        raise RuntimeError(msg)
     print("ComfyUI server is ready.")
 
     in_colab = "google.colab" in sys.modules
