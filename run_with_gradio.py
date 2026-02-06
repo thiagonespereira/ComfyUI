@@ -15,7 +15,16 @@ import sys
 import threading
 import time
 
-# Set CLI args before ComfyUI parses them: listen on all interfaces for Colab/remote access
+# Sanitize argv before ComfyUI parses it.
+# In Jupyter/Colab, sys.argv typically contains: ["python", "-f", "<kernel-connection.json>"]
+# The "-f" argument is not understood by ComfyUI's argparse and would cause a failure,
+# so we strip it (and its value) out before comfy.options / cli_args are imported.
+if "-f" in sys.argv:
+    idx = sys.argv.index("-f")
+    # Remove "-f" and the following path (if present)
+    del sys.argv[idx : min(idx + 2, len(sys.argv))]
+
+# Ensure the ComfyUI server listens on all interfaces and doesn't try to auto-open a browser.
 if "--listen" not in sys.argv:
     sys.argv += ["--listen", "0.0.0.0"]
 if "--disable-auto-launch" not in sys.argv:
