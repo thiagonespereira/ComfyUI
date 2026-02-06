@@ -11,9 +11,13 @@ that embeds the ComfyUI UI (or shows the Colab proxy link when running in Colab)
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
+
+# ComfyUI root = directory containing this script (so server runs "in place")
+COMFYUI_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # Sanitize argv before ComfyUI parses it.
 # In Jupyter/Colab, sys.argv contains: ["colab_kernel_launcher.py", "-f", "<kernel-connection.json>"]
@@ -21,6 +25,8 @@ import time
 # Replace argv with a minimal set so the server thread never sees Jupyter's args.
 def _argv_for_comfy():
     base = [sys.argv[0]] if sys.argv else ["python"]
+    if "--base-directory" not in base:
+        base += ["--base-directory", COMFYUI_ROOT]
     if "--listen" not in base:
         base += ["--listen", "0.0.0.0"]
     if "--disable-auto-launch" not in base:
@@ -48,6 +54,11 @@ def _run_comfyui_server():
     global _server_start_error
     _server_start_error.clear()
     try:
+        # Run from ComfyUI root so imports and paths resolve correctly (e.g. in Colab)
+        os.chdir(COMFYUI_ROOT)
+        if COMFYUI_ROOT not in sys.path:
+            sys.path.insert(0, COMFYUI_ROOT)
+
         import main
 
         event_loop, _, start_all = main.start_comfyui()
@@ -57,18 +68,22 @@ def _run_comfyui_server():
         raise
 
 
-def _wait_for_server(timeout: int = 90, interval: float = 1.0) -> bool:
+def _wait_for_server(timeout: int = 120, interval: float = 1.0) -> bool:
     """Return True when the ComfyUI server responds, or False on timeout."""
     import urllib.request
 
+    # Try both; some environments resolve only one
+    urls_to_try = (COMFYUI_URL_LOCAL, f"http://localhost:{COMFYUI_PORT}")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        try:
-            req = urllib.request.Request(COMFYUI_URL_LOCAL)
-            urllib.request.urlopen(req, timeout=2)
-            return True
-        except Exception:
-            time.sleep(interval)
+        for url in urls_to_try:
+            try:
+                req = urllib.request.Request(url)
+                urllib.request.urlopen(req, timeout=2)
+                return True
+            except Exception:
+                pass
+        time.sleep(interval)
     return False
 
 
